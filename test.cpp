@@ -28,7 +28,7 @@ public:
     //java python Object 是所有其他类类型的基类
     //C++17 Any类型
 
-    void run()
+    Any run()
     {
         std::cout<< "tid: "<<std::this_thread::get_id()<<"begin! "<<std::endl;
         //std::this_thread::sleep_for(std::chrono::seconds(2));

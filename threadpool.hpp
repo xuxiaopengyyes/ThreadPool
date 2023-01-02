@@ -29,7 +29,7 @@ public:
     template<tpyename T>
     T cast_()
     {
-        
+
         Derive<T> *pd=dynamic_cast<Derive<T> *>(base_.get());//基类指针转派生类对象指针
         if(pd==nullptr)//基类与派生类不匹配
         {
@@ -61,13 +61,76 @@ private:
     //定义一个基类的指针
     std::unique_ptr<Base> base_;
 };
+
+//实现一个信号量类
+class Semaphore
+{
+public:
+    Semaphore(int limit=0 )
+        :resLimit_(limit)
+    {}
+    ~Semaphore() =default;
+
+    // 获取一个信号量 v
+    void wait()
+    {
+        std::unique_lock<std::mutex> lock(mtx_);
+        //等待信号量有资源，没有资源的话，会阻塞当前线程
+        cond_.wait(lock,[&]()->bool{return resLimit_>0;});
+        resLimit_--;
+
+    }
+
+    //增加一个信号量 p
+    void post()
+    {
+        std::unique_lock<std::mutex> lock(mtx_);
+        resLimit_++;
+        cond_.notify_all();
+    }
+private:
+    int resLimit_;
+    std::mutex mtx_;
+    std::condition_variable cond_;
+
+};
+
+//Task类型的前置声明
+class Task;
+
+//实现接收提交到线程池的task任务执行完成后的返回值类型Result
+class Result
+{
+public:
+    Result(std::shard_ptr<Task> task,bool isvalid = true);
+    ~Result() = default;
+
+    // setVal方法，获取任务执行完的返回值
+
+    //get方法，用户调用这个方法获取task的返回值
+    Any get();
+
+    void setaVal(Any any);
+
+private:
+    Any any_; //存储任务的返回值
+    Semaphore sem_; //线程通信信号量
+    std::shared_ptr<Task> task_; //指向对应获取返回值的任务对象
+    std::atomic_bool isValid_; //返回值是否有效
+};
+
 //任务抽象基类
 class Task
 {
 public:
+    Task();
+    ~Task()=default();
+    void exec();
+    void setResult(Result *res);
     //用户可以自定义任意任务类型，从Task继承，重写run方法，实现自定义任务处理
     virtual Any run()=0;
 private:    
+    Result* result_; //Result对象的生命周期长于Task
 };
 
 
@@ -137,7 +200,7 @@ public:
     void setTaskQueMaxThreshHold(int threshhold);
 
     //给线程池提交任务
-    void submitTask(std::shared_ptr<Task> sp);
+    Result submitTask(std::shared_ptr<Task> sp);
 
     //开启线程池
     void start(int initThreadSize = 4 );
