@@ -14,6 +14,7 @@ const int TASK_MAX_THRESHHOLD=1024;
     ,taskSize_(0)
     ,taskQueMaxThreshHold_(TASK_MAX_THRESHHOLD)
     ,poolMode_(PoolMode::MODE_FIXED)
+    ,isPoolRunning_(faslse)
  {}
 
  //线程池析构

@@ -71,7 +71,7 @@ public:
     {}
     ~Semaphore() =default;
 
-    // 获取一个信号量 v
+    // 获取一个信号量 p操作 信号量-1
     void wait()
     {
         std::unique_lock<std::mutex> lock(mtx_);
@@ -81,7 +81,7 @@ public:
 
     }
 
-    //增加一个信号量 p
+    //增加一个信号量 v操作  信号量+1
     void post()
     {
         std::unique_lock<std::mutex> lock(mtx_);
@@ -218,6 +218,7 @@ private:
 private:
     std::vector<std::unique_ptr<Thread>> threads_; //线程列表
     size_t initThreadSize_; //初始的线程数量
+    int threadSizeThreshHold_; //线程数量上限阈值
 
     std::queue<std::shared_ptr<Task>> taskQue_; //任务队列
     std::atomic_uint taskSize_; //任务数量
@@ -229,7 +230,11 @@ private:
 
     PoolMode poolMode_; //当前线程池的工作模式
 
+    //表示当前线程池的启动状态
+    std::atomic_bool isPoolRunning_;
 
+    //记录空闲线程的数量
+    std::atomic_int idleThreadSize_;
 };
 
 
