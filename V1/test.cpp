@@ -24,7 +24,7 @@ public:
         :begin_(begin)
         ,end_(end)
     {}
-    //问题一：如何设计run函数的返回值，可以表示任意的类型
+   
     //java python Object 是所有其他类类型的基类
     //C++17 Any类型
 
@@ -62,7 +62,7 @@ int main()
     //pool.submitTask(std::make_shared<MyTask>(200000001, 300000000));
 
 
-    UL sum1 = res1.get().cast_<UL>();  // get返回了一个Any类型，怎么转成具体的类型呢？
+    UL sum1 = res1.get().cast_<UL>();  
     UL sum2 = res2.get().cast_<UL>();
     UL sum3 = res3.get().cast_<UL>();
 
