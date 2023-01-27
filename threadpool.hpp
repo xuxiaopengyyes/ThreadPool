@@ -9,6 +9,7 @@
 #include<condition_variable>
 #include<functional>
 #include<unordered_map>
+#include<thread>
 
 //Any类型：可以接受任意数据的类型
 class Any
@@ -27,11 +28,11 @@ public:
     {}
 
     //将Any对象中存储的data数据提取出来
-    template<tpyename T>
+    template<typename T>
     T cast_()
     {
 
-        Derive<T> *pd=dynamic_cast<Derive<T> *>(base_.get());//基类指针转派生类对象指针
+        Derive<T> *pd=dynamic_cast<Derive<T>*>(base_.get());//基类指针转派生类对象指针
         if(pd==nullptr)//基类与派生类不匹配
         {
             throw "type is numatch!";
@@ -48,13 +49,13 @@ private:
     };
 
     //派生类类型
-    template<typeneme T>
+    template<typename T>
     class Derive : public Base
     {
     public:
         Derive(T data) : data_(data)
         {}
-    private:
+    
         T data_;//任意的类型
     };
 
@@ -71,7 +72,13 @@ public:
         :resLimit_(limit)
     {}
     ~Semaphore() =default;
-
+    Semaphore(Semaphore &&)=default;
+    Semaphore& operator=(Semaphore &&s)
+    {
+        resLimit_=s.resLimit_;
+        mtx_=move(s.mtx_);
+        cond_=move(s.cond_);
+    }
     // 获取一个信号量 p操作 信号量-1
     void wait()
     {
@@ -103,9 +110,18 @@ class Task;
 class Result
 {
 public:
-    Result(std::shard_ptr<Task> task,bool isvalid = true);
+    Result(std::shared_ptr<Task> task,bool isvalid = true);
     ~Result() = default;
-
+    Result(const Result &)=delete;
+    Result& operator=(const Result &)=delete;
+    Result(Result && res)
+    {
+        any_=move(res.any_); 
+        sem_ =move(res.sem_); 
+        task_=move(res.task_); 
+        isValid_=move(res.isValid_); 
+    }
+    Result& operator=(Result && res)=default;
     // setVal方法，获取任务执行完的返回值
 
     //get方法，用户调用这个方法获取task的返回值
@@ -125,7 +141,7 @@ class Task
 {
 public:
     Task();
-    ~Task()=default();
+    ~Task()=default;
     void exec();
     void setResult(Result *res);
     //用户可以自定义任意任务类型，从Task继承，重写run方法，实现自定义任务处理
@@ -164,7 +180,7 @@ public:
 
 private:    
     ThreadFunc func_;
-    static int generatedId_;//??
+    static int generateId_;
     int threadId_; //保存线程id
 };
 
@@ -200,6 +216,9 @@ public:
     //设置task任务队列上线阈值
     void setTaskQueMaxThreshHold(int threshhold);
 
+    // 设置线程池cached模式下线程阈值
+	void setThreadSizeThreshHold(int threshhold);
+
     //给线程池提交任务
     Result submitTask(std::shared_ptr<Task> sp);
 
@@ -211,7 +230,7 @@ public:
 
 private:
     //定义线程函数
-    void threadFunc();
+    void threadFunc(int threadid);
 
     //检查pool的运行状态
     bool checkRunningState() const;

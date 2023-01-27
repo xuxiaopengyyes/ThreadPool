@@ -45,6 +45,7 @@ private:
     int end_;
 };
 
+using UL=unsigned long long;
 
 int main()
 {
@@ -52,20 +53,20 @@ int main()
     pool.start(4);
     
     //如何设计Result机制
-    Result res = pool.submitTask(std::make_shared<MyTask>());
-    
-    int sum=res.get().cast_<int >();
-    
-    pool.submitTask(std::make_shared<MyTask>());
-    pool.submitTask(std::make_shared<MyTask>());
-    pool.submitTask(std::make_shared<MyTask>());
-    pool.submitTask(std::make_shared<MyTask>());
-    pool.submitTask(std::make_shared<MyTask>());
-    pool.submitTask(std::make_shared<MyTask>());
-    pool.submitTask(std::make_shared<MyTask>());
-    pool.submitTask(std::make_shared<MyTask>());
+    Result res1 = pool.submitTask(std::make_shared<MyTask>(1,100000000));
+    Result res2 = pool.submitTask(std::make_shared<MyTask>(100000001, 200000000));
+    Result res3 = pool.submitTask(std::make_shared<MyTask>(200000001, 300000000));
+    //pool.submitTask(std::make_shared<MyTask>(200000001, 300000000));
+
+    //pool.submitTask(std::make_shared<MyTask>(200000001, 300000000));
+    //pool.submitTask(std::make_shared<MyTask>(200000001, 300000000));
 
 
+    UL sum1 = res1.get().cast_<UL>();  // get返回了一个Any类型，怎么转成具体的类型呢？
+    UL sum2 = res2.get().cast_<UL>();
+    UL sum3 = res3.get().cast_<UL>();
+
+    cout << (sum1 + sum2 + sum3) << endl;
     getchar();
 
     

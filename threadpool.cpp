@@ -7,7 +7,7 @@
 #include<chrono>
 
 const int TASK_MAX_THRESHHOLD = INT32_MAX;
-const int TASK_MAX_THRESHHOLD = 1024;
+const int THREAD_MAX_THRESHHOLD = 1024;
 const int THREAD_MAX_IDLE_TIME =60; //秒
 
 
@@ -21,7 +21,7 @@ const int THREAD_MAX_IDLE_TIME =60; //秒
     ,taskQueMaxThreshHold_(TASK_MAX_THRESHHOLD)
     ,threadSizeThreshHold_(THREAD_MAX_THRESHHOLD)
     ,poolMode_(PoolMode::MODE_FIXED)
-    ,isPoolRunning_(faslse)
+    ,isPoolRunning_(false)
  {}
 
  //线程池析构
@@ -145,7 +145,7 @@ void ThreadPool::start(int initThreadSize )
 }
 
 //定义线程函数
-void ThreadPool::threadFunc()
+void ThreadPool::threadFunc(int threadid)
 {
     auto lastTime = std::chrono::high_resolution_clock().now();
     /*
@@ -287,7 +287,7 @@ Task::Task()
 
 void Task::exec()
 {
-    if(result!=nullptr)
+    if(result_!=nullptr)
     {
         result_->setaVal(run());// 发生多态调用
     }
