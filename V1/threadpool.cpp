@@ -300,8 +300,8 @@ void Task::setResult(Result *res)
 
 
 //////////////////////   Result方法的实现
-Result::Result(std::shard_ptr<Task> task,bool isvalid)
-    :isvalid_(isvalid)
+Result::Result(std::shared_ptr<Task> task,bool isvalid)
+    :isValid_(isvalid)
     ,task_(task)
 {
     task_->setResult(this);

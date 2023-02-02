@@ -1,6 +1,7 @@
 #ifndef THREADPOOL_H
 #define THREADPOOL_H
 
+#include<iostream>
 #include<vector>
 #include<queue>
 #include<memory>
@@ -76,8 +77,7 @@ public:
     Semaphore& operator=(Semaphore &&s)
     {
         resLimit_=s.resLimit_;
-        mtx_=move(s.mtx_);
-        cond_=move(s.cond_);
+        return *this;
     }
     // 获取一个信号量 p操作 信号量-1
     void wait()
@@ -116,10 +116,9 @@ public:
     Result& operator=(const Result &)=delete;
     Result(Result && res)
     {
-        any_=move(res.any_); 
-        sem_ =move(res.sem_); 
-        task_=move(res.task_); 
-        isValid_=move(res.isValid_); 
+        any_=std::move(res.any_);
+        task_=std::move(res.task_);
+        isValid_=isValid_.load();
     }
     Result& operator=(Result && res)=default;
     // setVal方法，获取任务执行完的返回值
