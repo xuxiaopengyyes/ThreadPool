@@ -84,7 +84,7 @@ Result ThreadPool::submitTask(std::shared_ptr<Task> sp)
     {
         //表示notFull_等待超过1s,条件依然没有满足
         std::cerr<< "task queue is full,submit task fail." <<std::endl;
-        return Result(sp, false);
+        return std::move(Result(sp, false));
     }
 
     //如果有空余，把任务放入任务队列中
@@ -113,7 +113,7 @@ Result ThreadPool::submitTask(std::shared_ptr<Task> sp)
 	}
 
     //返回任务的Result对象
-    return Result(sp);
+    return std::move(Result(sp));
 
 }
 
@@ -132,7 +132,7 @@ void ThreadPool::start(int initThreadSize )
     {
         //创建thread线程对象的时候，把线程函数给到thread线程对象
         auto ptr = std::make_unique<Thread>(std::bind(&ThreadPool::threadFunc, this, std::placeholders::_1));
-		int threadId = ptr->getId();
+        int threadId = ptr->getId();
 		threads_.emplace(threadId, std::move(ptr));//原位构造
     }
 
@@ -147,7 +147,9 @@ void ThreadPool::start(int initThreadSize )
 //定义线程函数
 void ThreadPool::threadFunc(int threadid)
 {
+    //在gcc编译器下high_resolution_clock实现为system_clock，系统范围的时钟，now()获得当前时间
     auto lastTime = std::chrono::high_resolution_clock().now();
+
     /*
     std::cout<<"begin thread func   "<<std::this_thread::get_id()<<std::endl;
     std::cout<<"end thread func   "<<std::this_thread::get_id()<<std::endl;
@@ -184,6 +186,8 @@ void ThreadPool::threadFunc(int threadid)
 
 				if (poolMode_ == PoolMode::MODE_CACHED)
 				{
+                    //cv_status::timeout 描述条件变量因时限耗尽而被唤醒
+                    //no_timeout 条件变量因notify_all、notify_one 或虚假地被唤醒
 					// 条件变量，超时返回了
 					if (std::cv_status::timeout ==
 						notEmpty_.wait_for(lock, std::chrono::seconds(1)))

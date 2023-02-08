@@ -73,8 +73,6 @@ public:
         :resLimit_(limit)
     {}
     ~Semaphore() =default;
-    Semaphore(Semaphore &&)=default;
-    Semaphore& operator=(Semaphore &&s)=default;
     // 获取一个信号量 p操作 信号量-1
     void wait()
     {
@@ -107,10 +105,6 @@ class Result
 public:
     Result(std::shared_ptr<Task> task,bool isvalid = true);
     ~Result() = default;
-    Result(const Result &)=delete;
-    Result& operator=(const Result &)=delete;
-    Result(Result && res)=default;
-    Result& operator=(Result && res)=default;
 
     // setVal方法，获取任务执行完的返回值
     void setaVal(Any any);
