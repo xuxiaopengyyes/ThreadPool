@@ -69,16 +69,12 @@ private:
 class Semaphore
 {
 public:
-    Semaphore(int limit=0 )
+    Semaphore(int limit=1 )
         :resLimit_(limit)
     {}
     ~Semaphore() =default;
     Semaphore(Semaphore &&)=default;
-    Semaphore& operator=(Semaphore &&s)
-    {
-        resLimit_=s.resLimit_;
-        return *this;
-    }
+    Semaphore& operator=(Semaphore &&s)=default;
     // 获取一个信号量 p操作 信号量-1
     void wait()
     {
@@ -86,7 +82,6 @@ public:
         //等待信号量有资源，没有资源的话，会阻塞当前线程
         cond_.wait(lock,[&]()->bool{return resLimit_>0;});
         resLimit_--;
-
     }
 
     //增加一个信号量 v操作  信号量+1
@@ -94,10 +89,10 @@ public:
     {
         std::unique_lock<std::mutex> lock(mtx_);
         resLimit_++;
-        cond_.notify_all();
+        cond_.notify_one();
     }
 private:
-    int resLimit_;
+    int resLimit_;//资源个数
     std::mutex mtx_;
     std::condition_variable cond_;
 
@@ -114,19 +109,16 @@ public:
     ~Result() = default;
     Result(const Result &)=delete;
     Result& operator=(const Result &)=delete;
-    Result(Result && res)
-    {
-        any_=std::move(res.any_);
-        task_=std::move(res.task_);
-        isValid_=isValid_.load();
-    }
+    Result(Result && res)=default;
     Result& operator=(Result && res)=default;
+
     // setVal方法，获取任务执行完的返回值
+    void setaVal(Any any);
 
     //get方法，用户调用这个方法获取task的返回值
     Any get();
 
-    void setaVal(Any any);
+    
 
 private:
     Any any_; //存储任务的返回值
@@ -223,6 +215,7 @@ public:
 
     //开启线程池
     void start(int initThreadSize = std::thread::hardware_concurrency() );
+    //hardware_concurrency() 返回能并发在一个程序中的线程数量，在多核系统中，返回值为cpu核心的数量
 
     ThreadPool(const ThreadPool&)=delete;
     ThreadPool& operator=(const ThreadPool&)=delete;
