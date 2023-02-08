@@ -1,7 +1,7 @@
 #ifndef THREADPOOL_H
 #define THREADPOOL_H
 
-#include<iostream>
+
 #include<vector>
 #include<queue>
 #include<memory>
@@ -11,6 +11,7 @@
 #include<functional>
 #include<unordered_map>
 #include<thread>
+
 
 //Any类型：可以接受任意数据的类型
 class Any
@@ -73,6 +74,11 @@ public:
         :resLimit_(limit)
     {}
     ~Semaphore() =default;
+    Semaphore(const Semaphore &) = delete;
+    Semaphore & operator=(const Semaphore &) = delete;
+    Semaphore(Semaphore&& s)=default;
+    Semaphore& operator=(Semaphore&& s)=default;
+
     // 获取一个信号量 p操作 信号量-1
     void wait()
     {
