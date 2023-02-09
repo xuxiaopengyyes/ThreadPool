@@ -50,6 +50,13 @@ using UL=unsigned long long;
 
 int main()
 {
+    int a=10;
+    double b;
+    b=static_cast<double> (a);
+    b=20;
+    cout<<b<<endl;
+}
+    #if 0
     {
         ThreadPool pool;
         pool.setMode(PoolMode::MODE_CACHED);
@@ -70,7 +77,7 @@ int main()
     cout << "main over!" << endl;
     getchar();
 }
-#if 0
+
 int main()
 {
     ThreadPool pool;
