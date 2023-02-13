@@ -202,6 +202,32 @@ public:
 	ThreadPool& operator=(const ThreadPool&) = delete;
 
 private:
+    //线程函数
+    void threadFunc(int threadid)
+    {
+        auto lastTime = std::chrono::high_resolution_clock().now();
+
+        //所有任务完成后，才可以回收资源
+        while(true)
+        {
+            Task task;
+            {
+                std::unique_lock<std::mutex> lock(taskQueMtx_);
+
+                std::cout<<"tid:" <<std::this_thread::git_id()<< "尝试获取任务..."<<std::endl;
+
+                while(taskQue_.size == 0)
+                {
+                    //线程池结束后回收资源
+                    if(!isPoolRunning_)
+                    {
+                        threads_erease(threadif);
+                    }
+                }
+            }
+        }
+    }
+    
     //检查pool的运行状态
     bool checkRunningState() const 
     {
