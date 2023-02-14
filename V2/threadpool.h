@@ -13,8 +13,8 @@
 #include<thread>
 #include<future>
 
-const int TASK_MAX_THRESHHOLD = 2; //INT32_MAX
-const int THREAD_MAX_THRESHHOLD = 1024;
+const int TASK_MAX_THRESHHOLD = 1024;
+const int THREAD_MAX_THRESHHOLD = 25;
 const int THREAD_MAX_IDLE_TIME = 60; //s //超时时间，回收线程
 
 //线程池支持的模式
@@ -172,7 +172,7 @@ public:
     }
 
     	// 开启线程池
-	void start(int initThreadSize = std::thread::hardware_concurrency())
+	void start(int initThreadSize = std::thread::hardware_concurrency())//线程初始个数为cpu核心数
 	{
 		// 设置线程池的运行状态
 		isPoolRunning_ = true;
@@ -230,6 +230,7 @@ private:
 
                     if(poolMode_ == PoolMode::MODE_CACHED)
                     {
+                        //如果notEmpty_ 超时苏醒，就判断空闲时间是否大于设定的最长空闲时间
                         if(std::cv_status::timeout ==notEmpty_.wait_for(lock,std::chrono::seconds(1)))
                         {
                             auto now = std::chrono::high_resolution_clock().now();
@@ -246,17 +247,17 @@ private:
                     }
                     else
                     {
-                        notEmpty_.wait(lock);
+                        notEmpty_.wait(lock);//fixed模式下或cached模式下动态开辟的线程已经释放完毕，那么就等待添加任务后唤醒
                     }
                 }
 
-                idleThreadSize_--;
+                idleThreadSize_--;//空闲线程数量--
                 std::cout << "tid: "<< std::this_thread::get_id()<<"获取任务成功..."<<std::endl;
 
                 //获取任务
                 task = taskQue_.front();
                 taskQue_.pop();
-                taskSize_--;
+                taskSize_--;//任务数量--
 
                 //如果依然有剩余任务，继续通知其他的线程执行任务
                 if(taskQue_.size() > 0)
@@ -271,7 +272,7 @@ private:
             //执行任务
             if(task!=nullptr)
             {
-                task(); //执行function<void()>
+                task(); //执行function<void()>  //真正的任务函数
             }
 
             idleThreadSize_++;

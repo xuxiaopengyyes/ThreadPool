@@ -20,16 +20,6 @@ int sum2(int a,int b,int c)
     return a+b+c;
 }
 
-void io_thread(int listenfd)
-{
-
-}
-
-//worker线程
-void worker_thread(int clienfd)
-{
-
-}
 
 int main()
 {
