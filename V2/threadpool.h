@@ -45,7 +45,7 @@ public:
     {
         //创建一个线程来执行一个线程函数 pthread_creat
         std::thread t(func_,threadId_);
-        t.deatch(); //分离线程 pthread_detach
+        t.detach(); //分离线程 pthread_detach
     }
 
     //获取线程id
@@ -86,7 +86,7 @@ public:
         //等待线程池里面所有的线程返回 有两种状态： 阻塞& 正在执行任务
         std::unique_lock<std::mutex> lock(taskQueMtx_);
         notEmpty_.notify_all();
-        exitCond_.wait(Lock, [&]()->bool {return threads_.size() == 0; });
+        exitCond_.wait(lock, [&]()->bool {return threads_.size() == 0; });
     }
 
     //设置线程池的工作模式
@@ -102,7 +102,7 @@ public:
     {
         if(checkRunningState())
             return;
-        taskQueMAxThreshHold_ = threshhold;
+        taskQueMaxThreshHold_ = threshhold;
     }
 
     //设置线程cached模式下线程阈值
@@ -112,20 +112,21 @@ public:
             return;
         if(poolMode_ == PoolMode::MODE_CACHED)
         {
-            threadSizeThreshHold_ threshHold;
+            threadSizeThreshHold_ = threshHold;
         }
     }
 
     //给线程提交任务
 
     template<typename Func, typename... Args>
-    auto submitTask(Func&& func, Args&&... args) -> std::future<decltype(func(args...))>
+    auto submitTask(Func&& func, Args&&... args) -> std::future<decltype(func(args...))>//推导执行函数的返回类型，用future打包起来
     {
         // 打包任务，放入任务队列
-        using RType = decltype(func(args...));
+        using RType = decltype(func(args...));//decltype通过表达式可以推导返回值类型
         auto task = std::make_shared<std::packaged_task<RType()>>(
-            std::bind(std::forward<Func>(func),std::forward<Args>(args)... ));
-        std::future<Rtype> result = task->get_future();
+            std::bind(std::forward<Func>(func),std::forward<Args>(args)... ));//将任务打包,通过shared_ptr管理打包对象生存期
+                                                                             //通过完美转发保持参数的右值特性
+        std::future<RType> result = task->get_future();//将result和打包对象绑定
 
         //获取锁
         std::unique_lock<std::mutex> lock(taskQueMtx_);
@@ -142,11 +143,11 @@ public:
         }
 
         //如果有空余，把任务放入任务队列中
-        taskQue_.emplace([task](){*(task)();});
+        taskQue_.emplace([task](){(*task)();});
         taskSize_++;
 
         //因为新放了任务，任务队列肯定不空了，在notEmpty_上进行通知，赶快分配线程执行任务
-        notEmpty_notify_all();
+        notEmpty_.notify_all();
 
         //cached模式 任务模式比较紧急 场景 ： 小而快的任务，需要根据任务数量和空闲线程的数量，判断是否需要创建新的线程出来
         if(poolMode_ == PoolMode::MODE_CACHED
@@ -156,9 +157,9 @@ public:
             std::cout << ">>> create new thread... "<<std::endl;
 
             //创建新的线程对象
-            auto ptr = std::make_unique<Thread>(std::bind(&threadPool::threadFunc,this,std::placeholders::_1));
+            auto ptr = std::make_unique<Thread>(std::bind(&ThreadPool::threadFunc,this,std::placeholders::_1));
             int threadId = ptr->getId();
-            threads_emplace(threadId, std::move(ptr));
+            threads_.emplace(threadId, std::move(ptr));
             //启动线程
             threads_[threadId]->start();
             // 修改线程个数相关的变量
@@ -214,17 +215,67 @@ private:
             {
                 std::unique_lock<std::mutex> lock(taskQueMtx_);
 
-                std::cout<<"tid:" <<std::this_thread::git_id()<< "尝试获取任务..."<<std::endl;
+                std::cout<<"tid:" <<std::this_thread::get_id()<< "尝试获取任务..."<<std::endl;
 
-                while(taskQue_.size == 0)
+                while(taskQue_.size() == 0)
                 {
                     //线程池结束后回收资源
                     if(!isPoolRunning_)
                     {
-                        threads_erease(threadif);
+                        threads_.erase(threadid);
+                        std::cout<< "threadid: "<< std::this_thread::get_id() <<"exit!"<<std::endl;
+                        exitCond_.notify_all();
+                        return; //结束线程函数，释放线程资源
+                    }
+
+                    if(poolMode_ == PoolMode::MODE_CACHED)
+                    {
+                        if(std::cv_status::timeout ==notEmpty_.wait_for(lock,std::chrono::seconds(1)))
+                        {
+                            auto now = std::chrono::high_resolution_clock().now();
+                            auto dur = std::chrono::duration_cast<std::chrono::seconds>(now-lastTime);
+                            if(dur.count() >= THREAD_MAX_IDLE_TIME &&curThreadSize_ > initThreadSize_)
+                            {
+                                threads_.erase(threadid);
+                                curThreadSize_--;
+                                idleThreadSize_--;
+                                std::cout<<"threadid "<<std::this_thread::get_id() <<"exit"<<std::endl;
+                                return;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        notEmpty_.wait(lock);
                     }
                 }
+
+                idleThreadSize_--;
+                std::cout << "tid: "<< std::this_thread::get_id()<<"获取任务成功..."<<std::endl;
+
+                //获取任务
+                task = taskQue_.front();
+                taskQue_.pop();
+                taskSize_--;
+
+                //如果依然有剩余任务，继续通知其他的线程执行任务
+                if(taskQue_.size() > 0)
+                {
+                    notEmpty_.notify_all();
+                }
+
+                //取出一个任务，说明任务队列不满，应该通知可以继续提交生产任务
+                notFull_.notify_all();
+            }//应该把锁释放掉，锁只需用保护任务队列的安全
+
+            //执行任务
+            if(task!=nullptr)
+            {
+                task(); //执行function<void()>
             }
+
+            idleThreadSize_++;
+            lastTime=std::chrono::high_resolution_clock().now();//更新线程执行完任务的时间
         }
     }
     
@@ -236,7 +287,7 @@ private:
 private:
     std::unordered_map<int,std::unique_ptr<Thread>> threads_; //线程列表
 
-    int initThreadSize; //初始的线程数量
+    int initThreadSize_; //初始的线程数量
     int threadSizeThreshHold_; //线程数量上限阈值
     std::atomic_int curThreadSize_; //记录当前线程池里面线程的总数量
     std::atomic_int idleThreadSize_; //记录空闲线程的数量
@@ -244,10 +295,10 @@ private:
     //Task任务  -》 函数对象 
     using Task = std::function<void()>;
     std::queue<Task> taskQue_; //任务队列
-    std::atomic_int taskSize_(); //任务的数量
+    std::atomic_int taskSize_; //任务的数量
     int taskQueMaxThreshHold_; //任务队列数量上限阈值 
 
-    std::mutex taskQueMax_; //保证任务队列的线程安全
+    std::mutex taskQueMtx_; //保证任务队列的线程安全
     std::condition_variable notFull_;   //表示任务队列不满
     std::condition_variable notEmpty_;  //表示任务队列不空
     std::condition_variable exitCond_; //等待线程资源全部回收
