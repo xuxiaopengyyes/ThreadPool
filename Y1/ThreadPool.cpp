@@ -155,3 +155,24 @@ public:
         std::unique_lock<std::mutex> locker(m_muntex)
         return m_queue.size();
     }
+
+    int main()
+{
+	std::thread tha(add_a);
+	std::thread thb(add_b);
+	std::thread thc(add_c);
+	std::thread thd(add_d);
+
+	tha.join();
+	thb.join();
+	thc.join();
+	thd.join();
+
+	std::this_thread::sleep_for(std::chrono::seconds(20));
+	std::thread the(add_a);
+	std::thread thf(add_b);
+	the.join();
+	thf.join();
+
+	return 0;
+}
