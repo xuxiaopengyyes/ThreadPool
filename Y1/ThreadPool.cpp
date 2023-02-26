@@ -60,7 +60,7 @@ private:
             return 2;
         }
 
-        m_queue.push_back(std::forword<F>(x));
+        m_queue.push_back(std::forward<F>(x));
         m_notEmpty.notify_one();
         return 0;
     }
@@ -74,7 +74,7 @@ public:
     template<typename F>
     int Put(F&& x)
     {
-        return Add(std::forword< F >(x));
+        return Add(std::forward< F >(x));
     }
 
     int notTask()
@@ -252,7 +252,7 @@ public:
     {
         using RetType = decltype(func(args...));
         auto task = std::make_shared<std::packaged_task<RetType()> >(
-            std::bind(std::forword<Func>(func),std::forword<Args>(args)...));
+            std::bind(std::forward<Func>(func),std::forward<Args>(args)...));
         std::future<RetType> result = task->get_future();
 
         if(m_queue.Put([task]() {(*task)();}) != 0 )
