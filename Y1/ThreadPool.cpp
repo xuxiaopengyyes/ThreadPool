@@ -48,15 +48,15 @@ private:
     int Add(F&& x)
     {
         std::unique_lock<std::mutex> locker(m_mutex);
-        if(!M_notFull.wait_for(lock,std::chrono::seconds(1),
+        if(!m_notFull.wait_for(locker,std::chrono::seconds(1),
             [this] {return m_needStop || !IsFull();}))
         {
-            cout<< "task queue full ..." <<endl;
+            std::cout<< "task queue full ..." <<std::endl;
             return 1;
         }
         if(m_needStop)
         {
-            cout<< "queue stop ..."<<endl;
+            std::cout<< "queue stop ..."<<std::endl;
             return 2;
         }
 
@@ -71,10 +71,10 @@ public:
         ,m_needStop(false) // 同步队列开始工作
     {}
 
-    template<class F>
+    template<typename F>
     int Put(F&& x)
     {
-        return Add(std::forword<F>(x));
+        return Add(std::forword< F >(x));
     }
 
     int notTask()
@@ -97,7 +97,7 @@ public:
         }
         if(m_needStop)
         {
-            cout<< "queue stop ..."<<endl;
+            std::cout<< "queue stop ..."<<std::endl;
         }
 
         list = std::move(m_queue);
@@ -118,7 +118,7 @@ public:
         {
             return 1;
         }
-        if(m_needStop())
+        if(m_needStop)
         {
             return 2;
         }
@@ -152,11 +152,162 @@ public:
 
     size_t Size() const
     {
-        std::unique_lock<std::mutex> locker(m_muntex)
+        std::unique_lock<std::mutex> locker(m_mutex);
         return m_queue.size();
     }
+};
 
-    int main()
+const int MaxTaskCount = 2;
+class CachedThreadPool
+{
+public:
+    using Task = std::function<void(void)>;
+private:
+    std::unordered_map<std::thread::id, std::shared_ptr<std::thread> > m_threadgroup;
+    int m_coreThreadSize;
+    int m_maxThreadSize;
+    std::atomic_int m_idleThreadSize;
+    std::atomic_int m_curThreadSize;
+    mutable std::mutex m_mutex;
+    SyncQueue<Task> m_queue;
+    std::atomic_bool m_running;
+    std::once_flag m_flag;
+    void Start(int numthreads)
+    {
+        m_running = true;
+        m_curThreadSize = numthreads;
+        for(int i=0; i < numthreads; ++i)
+        {
+            auto tha = std::make_shared<std::thread>(std::thread(&CachedThreadPool::RunInThread,this));
+            std::thread::id tid = tha->get_id();
+            //是否分离线程？？？？
+            m_threadgroup.emplace(tid, std::move(tha));
+            m_idleThreadSize++;
+        }
+    }
+    void RunInThread()
+    {
+        auto tid = std::this_thread::get_id();
+        auto startTime = std::chrono::high_resolution_clock().now();
+        while(m_running)
+        {
+            Task task;
+            if(m_queue.Size() == 0 && m_queue.notTask())
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                auto now = std::chrono::high_resolution_clock().now();
+                auto intervalTime = std::chrono::duration_cast<std::chrono::seconds>(now-startTime);
+                if(intervalTime.count() >= KeepAliveTime && m_curThreadSize > m_coreThreadSize)
+                {
+                    m_threadgroup.find(tid)->second->detach();//???
+                    m_threadgroup.erase(tid);
+                    m_curThreadSize--;
+                    m_idleThreadSize--;
+                    std::cout << "free thread idle" <<m_curThreadSize <<" "<<m_coreThreadSize <<std::endl;
+                    return ;
+                }
+            }
+            if(!m_queue.Take(task) && m_running)
+            {
+                m_idleThreadSize--;
+                task();
+                m_idleThreadSize++;
+                startTime = std::chrono::high_resolution_clock().now();
+            }
+        }
+    }
+    void StopThreadGroup()
+    {
+        m_queue.Stop();
+        m_running =false;
+
+        for(auto& thread : m_threadgroup)
+        {
+            thread.second->join();
+        }
+        m_threadgroup.clear();
+    }
+public:
+    CachedThreadPool(int initNumThreads,int taskPoolSize = MaxTaskCount)
+        :m_coreThreadSize(initNumThreads)
+        ,m_maxThreadSize(2 * std::thread::hardware_concurrency() + 1)
+        ,m_idleThreadSize(0)
+        ,m_curThreadSize(0)
+        ,m_queue(taskPoolSize)
+        ,m_running(false)
+    {
+        Start(m_coreThreadSize);
+    }
+    ~CachedThreadPool()
+    {
+        Stop();
+    }
+    void Stop()
+    {
+        std::call_once(m_flag, [this] {StopThreadGroup();});
+    }
+
+    template<class Func, class... Args>//decltype是如何推导的
+    auto AddTask(Func&& func,Args&&... args)->std::future<decltype(func(args...))>
+    {
+        using RetType = decltype(func(args...));
+        auto task = std::make_shared<std::packaged_task<RetType()> >(
+            std::bind(std::forword<Func>(func),std::forword<Args>(args)...));
+        std::future<RetType> result = task->get_future();
+
+        if(m_queue.Put([task]() {(*task)();}) != 0 )
+        {
+            std::cout<< "who run 调用者运行策略" <<std::endl;
+            (*task)();
+        }
+        if(m_idleThreadSize <= 0 && m_curThreadSize < m_maxThreadSize)
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            auto tha = std::make_shared<std::thread> (std::thread(&CachedThreadPool::RunInThread,this));
+            std::thread::id tid = tha->get_id();
+
+            m_threadgroup.emplace(tid, std::move(tha));
+            m_idleThreadSize++;
+            m_curThreadSize++;
+        }
+        return result;
+    }
+};
+CachedThreadPool pool(2);
+
+int add(int a,int b,int s)
+{
+    std::this_thread::sleep_for(std::chrono::seconds(s));
+    int c=a+b;
+    std::cout<< "add begin ..." <<std::endl;
+    return c;
+}
+
+int add_a()
+{
+    auto r=pool.AddTask(add,10,20,4);
+    std::cout<<"add_a: "<<r.get() <<std::endl;
+}
+
+int add_b()
+{
+    auto r=pool.AddTask(add,20,30,6);
+    std::cout<<"add_b: "<<r.get() <<std::endl;
+}
+
+int add_c()
+{
+    auto r=pool.AddTask(add,30,40,1);
+    std::cout<<"add_c: "<<r.get() <<std::endl;
+}
+
+int add_d()
+{
+    auto r=pool.AddTask(add,10,40,9);
+    std::cout<<"add_d: "<<r.get() <<std::endl;
+}
+
+int main()
 {
 	std::thread tha(add_a);
 	std::thread thb(add_b);
